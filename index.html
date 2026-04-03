@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ollama Chat - gemma3:1b</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0f0f0f;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #252525;
+            --bg-hover: #2a2a2a;
+            --accent: #ff6b35;
+            --accent-hover: #ff8555;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --text-muted: #666666;
+            --border: #333333;
+            --success: #4ade80;
+            --warning: #fbbf24;
+            --error: #f87171;
+            --radius: 12px;
+            --radius-sm: 8px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo svg {
+            width: 32px;
+            height: 32px;
+            fill: var(--accent);
+        }
+
+        .logo h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .logo span {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            font-weight: 400;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--warning);
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected {
+            background: var(--success);
+            animation: none;
+        }
+
+        .status-dot.error {
+            background: var(--error);
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            max-width: 900px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .message {
+            display: flex;
+            gap: 16px;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            flex-direction: row-reverse;
+        }
+
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .message.assistant .message-avatar {
+            background: linear-gradient(135deg, var(--accent), #ff8f55);
+        }
+
+        .message.user .message-avatar {
+            background: var(--bg-tertiary);
+        }
+
+        .message-avatar svg {
+            width: 20px;
+            height: 20px;
+            fill: var(--text-primary);
+        }
+
+        .message-content {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px 20px;
+            max-width: 75%;
+            line-height: 1.6;
+        }
+
+        .message.user .message-content {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .message-content pre {
+            background: var(--bg-tertiary);
+            padding: 12px;
+            border-radius: var(--radius-sm);
+            overflow-x: auto;
+            margin: 8px 0;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.875rem;
+        }
+
+        .message-content code {
+            background: var(--bg-tertiary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.875rem;
+        }
+
+        .message-content pre code {
+            background: none;
+            padding: 0;
+        }
+
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 8px 0;
+        }
+
+        .typing-indicator span {
+            width: 8px;
+            height: 8px;
+            background: var(--text-muted);
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out;
+        }
+
+        .typing-indicator span:nth-child(1) { animation-delay: 0s; }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        .input-area {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .input-wrapper {
+            flex: 1;
+        }
+
+        #messageInput {
+            width: 100%;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 14px 18px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-family: inherit;
+            resize: none;
+            min-height: 52px;
+            max-height: 200px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        #messageInput:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
+        }
+
+        #messageInput::placeholder {
+            color: var(--text-muted);
+        }
+
+        .send-btn {
+            background: var(--accent);
+            border: none;
+            border-radius: var(--radius-sm);
+            width: 52px;
+            height: 52px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.2s;
+            flex-shrink: 0;
+        }
+
+        .send-btn:hover {
+            background: var(--accent-hover);
+        }
+
+        .send-btn:active {
+            transform: scale(0.95);
+        }
+
+        .send-btn:disabled {
+            background: var(--bg-tertiary);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .send-btn svg {
+            width: 22px;
+            height: 22px;
+            fill: var(--text-primary);
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .control-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 10px 16px;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .control-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .control-btn.danger:hover {
+            border-color: var(--error);
+            color: var(--error);
+        }
+
+        .control-btn svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+
+        .settings {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-top: 16px;
+        }
+
+        .settings-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+        }
+
+        .settings-header h3 {
+            font-size: 0.875rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .settings-content {
+            margin-top: 16px;
+            display: grid;
+            gap: 16px;
+        }
+
+        .setting-item {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .setting-item label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .setting-item input,
+        .setting-item select {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 10px 14px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            outline: none;
+        }
+
+        .setting-item input:focus,
+        .setting-item select:focus {
+            border-color: var(--accent);
+        }
+
+        .setting-item input[type="number"] {
+            width: 120px;
+        }
+
+        .empty-state {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            fill: var(--text-muted);
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .empty-state h2 {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .empty-state p {
+            font-size: 0.875rem;
+            max-width: 300px;
+        }
+
+        @media (max-width: 600px) {
+            main {
+                padding: 12px;
+            }
+
+            header {
+                padding: 12px 16px;
+            }
+
+            .logo span {
+                display: none;
+            }
+
+            .message-content {
+                max-width: 85%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            <div>
+                <h1>Ollama Chat</h1>
+                <span>gemma3:1b</span>
+            </div>
+        </div>
+        <div class="status">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Подключение...</span>
+        </div>
+    </header>
+
+    <main>
+        <div class="messages" id="messages">
+            <div class="empty-state" id="emptyState">
+                <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+                <h2>Начните разговор</h2>
+                <p>Отправьте сообщение, чтобы начать общение с моделью gemma3:1b</p>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <div class="input-wrapper">
+                <textarea id="messageInput" placeholder="Введите ваше сообщение..." rows="1"></textarea>
+            </div>
+            <button class="send-btn" id="sendBtn" title="Отправить">
+                <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            </button>
+        </div>
+
+        <div class="controls">
+            <button class="control-btn" id="clearBtn" title="Очистить историю">
+                <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                Очистить
+            </button>
+            <button class="control-btn" id="stopBtn" title="Остановить генерацию" style="display: none;">
+                <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+                Стоп
+            </button>
+        </div>
+
+        <div class="settings">
+            <div class="settings-header" onclick="toggleSettings()">
+                <h3>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+                    Настройки
+                </h3>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" id="settingsArrow"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+            </div>
+            <div class="settings-content" id="settingsContent" style="display: none;">
+                <div class="setting-item">
+                    <label>Модель</label>
+                    <select id="modelSelect">
+                        <option value="gemma3:1b" selected>gemma3:1b</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label>Temperature (0-2)</label>
+                    <input type="number" id="temperature" value="0.7" min="0" max="2" step="0.1">
+                </div>
+                <div class="setting-item">
+                    <label>Max tokens</label>
+                    <input type="number" id="maxTokens" value="512" min="1" max="4096">
+                </div>
+                <div class="setting-item">
+                    <label>IP адрес Ollama</label>
+                    <input type="text" id="ollamaHost" value="192.168.1.100" placeholder="192.168.1.100">
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const messagesContainer = document.getElementById('messages');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const emptyState = document.getElementById('emptyState');
+        const settingsContent = document.getElementById('settingsContent');
+        const settingsArrow = document.getElementById('settingsArrow');
+        const modelSelect = document.getElementById('modelSelect');
+        const ollamaHostInput = document.getElementById('ollamaHost');
+
+        let isGenerating = false;
+        let abortController = null;
+        let conversationHistory = [];
+
+        function getOllamaUrl() {
+            const host = ollamaHostInput.value || '192.168.1.100';
+            return `http://${host}:11434`;
+        }
+
+        function updateStatus(status, text) {
+            statusDot.className = 'status-dot ' + status;
+            statusText.textContent = text;
+        }
+
+        async function checkConnection() {
+            try {
+                const response = await fetch(`${getOllamaUrl()}/api/tags`, {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(5000)
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    updateStatus('connected', 'Подключено');
+                    if (data.models) {
+                        modelSelect.innerHTML = data.models.map(m => 
+                            `<option value="${m.name}" ${m.name === 'gemma3:1b' ? 'selected' : ''}>${m.name}</option>`
+                        ).join('');
+                    }
+                    return true;
+                }
+            } catch (e) {
+                updateStatus('error', 'Нет связи');
+            }
+            return false;
+        }
+
+        function autoResize() {
+            messageInput.style.height = 'auto';
+            messageInput.style.height = Math.min(messageInput.scrollHeight, 200) + 'px';
+        }
+
+        function toggleSettings() {
+            const isHidden = settingsContent.style.display === 'none';
+            settingsContent.style.display = isHidden ? 'grid' : 'none';
+            settingsArrow.style.transform = isHidden ? 'rotate(180deg)' : '';
+        }
+
+        function createMessageElement(role, content) {
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+            div.innerHTML = `
+                <div class="message-avatar">
+                    ${role === 'assistant' 
+                        ? '<svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>'
+                        : '<svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>'
+                    }
+                </div>
+                <div class="message-content">${formatContent(content)}</div>
+            `;
+            return div;
+        }
+
+        function formatContent(content) {
+            let formatted = content
+                .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                .replace(/\n/g, '<br>');
+            return formatted;
+        }
+
+        function createTypingIndicator() {
+            const div = document.createElement('div');
+            div.className = 'message assistant';
+            div.id = 'typingIndicator';
+            div.innerHTML = `
+                <div class="message-avatar">
+                    <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                </div>
+                <div class="message-content">
+                    <div class="typing-indicator">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+            `;
+            return div;
+        }
+
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message || isGenerating) return;
+
+            emptyState.style.display = 'none';
+            messagesContainer.appendChild(createMessageElement('user', message));
+            
+            conversationHistory.push({ role: 'user', content: message });
+            
+            messageInput.value = '';
+            autoResize();
+            
+            isGenerating = true;
+            sendBtn.disabled = true;
+            stopBtn.style.display = 'flex';
+            
+            const typingIndicator = createTypingIndicator();
+            messagesContainer.appendChild(typingIndicator);
+            scrollToBottom();
+
+            abortController = new AbortController();
+            let fullResponse = '';
+
+            try {
+                const response = await fetch(`${getOllamaUrl()}/api/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: modelSelect.value,
+                        messages: conversationHistory,
+                        stream: true,
+                        options: {
+                            temperature: parseFloat(document.getElementById('temperature').value) || 0.7,
+                            num_predict: parseInt(document.getElementById('maxTokens').value) || 512
+                        }
+                    }),
+                    signal: abortController.signal
+                });
+
+                typingIndicator.remove();
+                
+                const assistantMessage = createMessageElement('assistant', '');
+                const contentDiv = assistantMessage.querySelector('.message-content');
+                messagesContainer.appendChild(assistantMessage);
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n').filter(line => line.trim());
+
+                    for (const line of lines) {
+                        try {
+                            const data = JSON.parse(line);
+                            if (data.message?.content) {
+                                fullResponse += data.message.content;
+                                contentDiv.innerHTML = formatContent(fullResponse);
+                                scrollToBottom();
+                            }
+                        } catch (e) {}
+                    }
+                }
+
+                conversationHistory.push({ role: 'assistant', content: fullResponse });
+
+            } catch (e) {
+                typingIndicator.remove();
+                if (e.name !== 'AbortError') {
+                    const errorMsg = createMessageElement('assistant', `Ошибка: ${e.message}`);
+                    messagesContainer.appendChild(errorMsg);
+                    updateStatus('error', 'Ошибка');
+                }
+            }
+
+            isGenerating = false;
+            sendBtn.disabled = false;
+            stopBtn.style.display = 'none';
+            abortController = null;
+            scrollToBottom();
+        }
+
+        function scrollToBottom() {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function stopGeneration() {
+            if (abortController) {
+                abortController.abort();
+            }
+        }
+
+        function clearChat() {
+            messagesContainer.innerHTML = '';
+            messagesContainer.appendChild(emptyState);
+            emptyState.style.display = 'flex';
+            conversationHistory = [];
+        }
+
+        messageInput.addEventListener('input', autoResize);
+        messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        sendBtn.addEventListener('click', sendMessage);
+        clearBtn.addEventListener('click', clearChat);
+        stopBtn.addEventListener('click', stopGeneration);
+
+        checkConnection();
+        setInterval(checkConnection, 30000);
+    </script>
+</body>
+</html>
